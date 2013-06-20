@@ -13,7 +13,18 @@
             height: 300px;
             width: 600px;
             margin: -150px 0 0 -300px;
-            overflow: hidden;
+            /*overflow: hidden;*/
+        }
+        #simple:after {
+            display: block;
+            content: "";
+            position: absolute;
+            top: -50px;
+            left: -700px;
+            right: -600px;
+            height: 400px;
+            border-left: solid 1px red;
+            border-right: solid 1px green;
         }
         .mother__child {
             font-size: 40px;
@@ -23,13 +34,16 @@
             position: absolute;
             left: 0;
             top: 0;
-            background: green;
+            background: rgba(0, 255, 0, 0.5);
             width: 200px;
             height: 100%;
             float: left;
         }
+        .mother__child:nth-child(2n){
+            background: rgba(0,0,255,0.5);
+        }
         .mother__child--loading {
-            background: red;
+            background: rgba(255, 0, 0, 0.5);
         }
         .point {
             background: red;
@@ -46,20 +60,33 @@
     <script type="text/x-tmpl">
         <div class="child">child</div>
     </script>
+    <div id="distance">kjkj</div>
     <div id="simple"></div>
     <script src="mother.js"></script>
     <script>
         document.addEventListener('touchmove', function (e) { e.preventDefault(); }, false);
-        function Item() {
+        function Item(mother, child) {
+            this.mother = mother;
+            this.child  = child;
         }
         Item.prototype = {
             render: function(){
-
+                var child = this.child,
+                    mother = this.mother
+                ;
+                child.el.innerHTML = child.deltas.origin.x;
+            },
+            load: function(){
+                this.child.loading(false);
             },
             clean: function(){
 
             }
         };
+        var dist = document.getElementById('distance');
+        setInterval(function(){
+            dist.innerHTML = m.deltas.distance.x + ' - '+ m.deltas.children.x;
+        }, 1000/60);
 
         var m = new Mother('#simple', Item);
     </script>

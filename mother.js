@@ -12,26 +12,34 @@
 /**
  * Main Constructor
  */
-function Mother(el) {
+function Mother(el, ChildContent) {
 
     this.el = typeof el === 'string' ? document.querySelector(el) : el;
+    this.ChildContent = ChildContent;
 
     // container dimensions
-    this.dimensions = new Vec2(
-        this.el.offsetWidth,
-        this.el.offsetHeight
-    );
+    this.dimensions = {
+        mother: new Vec2(
+            this.el.offsetWidth,
+            this.el.offsetHeight
+        ),
+        child: new Vec2(200, 0)
+    };
 
     this.initiated = false;
     this.isDecelerating = false;
 
     // details about interactions
     this.interaction = {
-        start: new Vec2(),     // initial point at touch / mouse start
-        current: new Vec2(),   // latest point
-        previous: new Vec2(),  // previous point
-        delta: new Vec2(),     // diff between current and origin
-        origin: new Vec2()     // origin for decelleration
+        start       : new Vec2(), // initial point at touch / mouse start
+        current     : new Vec2(), // latest point
+        previous    : new Vec2(), // previous point
+        context      : new Vec2()  // context for decelleration
+    };
+    this.deltas = {
+        distance    : new Vec2(0,0), // distance tavelled since beginning
+        children    : new Vec2(0,0), // children travelled since beginning
+        currentMove : new Vec2()    // delta from previous to current
     };
 
     this._populate();
@@ -44,7 +52,7 @@ Mother.prototype = {
         var child;
         this.children = [];
         for (var i = 0; i < 9; i++) {
-            child = new Child(i);
+            child = new Child(i, this);
             this.children.push(child);
             this.el.appendChild(child.el);
         }
@@ -92,13 +100,10 @@ Mother.prototype = {
         // set interaction details
         this.interaction.start.set(point.pageX, point.pageY);
         this.interaction.start.time = e.timeStamp || Date.now();
-        this.interaction.origin.copy(this.interaction.start);
-        this.interaction.origin.time = this.interaction.start.time;
+        this.interaction.context.copy(this.interaction.start);
+        this.interaction.context.time = this.interaction.start.time;
 
         this.interaction.current.copy(this.interaction.start);
-
-        this.interaction.delta.copy(this.interaction.current);
-        this.interaction.delta.minus(this.interaction.origin);
 
         this._bind(moveEv, document);
         this._bind(endEv, document);
@@ -118,15 +123,21 @@ Mother.prototype = {
         this.interaction.current.set(point.pageX, point.pageY);
         this.interaction.current.time = e.timeStamp || Date.now();
 
-        this.interaction.delta.copy(this.interaction.current);
-        this.interaction.delta.minus(this.interaction.origin);
+        // update deltas
+        this.deltas.currentMove = this.interaction.current.getMinus(this.interaction.previous),
+        this.deltas.distance.plus(this.deltas.currentMove.getMultiply({ x: -1, y: -1}));
+        this.deltas.children.set(
+            Math.ceil(this.deltas.distance.x / this.dimensions.child.x),
+            Math.ceil(this.deltas.distance.y / this.dimensions.child.y)
+        );
+
 
 
         this._updateChildren();
 
-        if ( timestamp - this.interaction.origin.time > 300 ) {
-            this.interaction.origin.time = timestamp;
-            this.interaction.origin.copy(this.interaction.current);
+        if ( timestamp - this.interaction.context.time > 300 ) {
+            this.interaction.context.time = timestamp;
+            this.interaction.context.copy(this.interaction.current);
 
             this._loadTimeout = setTimeout(function () { that._load(); }, 100);
         }
@@ -140,50 +151,63 @@ Mother.prototype = {
 
         var point = hasTouch ? e.touches[0] : e,
             timestamp = e.timeStamp || Date.now(),
-            duration  = timestamp - this.interaction.origin.time
+            duration  = timestamp - this.interaction.context.time
         ;
 
-        // find destination given delta speed
+        // probably a click
+        if (duration < 300){
+            console.log('duration < 300');
+
+        // otherwise we have probably moved
+        } else {
+            this._load();
+        }
 
         // clean up
         this.initiated = false;
         this._unbind(moveEv, document);
         this._unbind(endEv, document);
         this._unbind(cancelEv, document);
-
-
-        console.log(this);
     },
 
     _load: function(){
-        console.log('load');
+        for (var i = 0; i < this.children.length; i++) {
+            this.children[i].load();
+        }
     },
     _updateChildren: function(){
         var child,
-            moveDelta  = this.interaction.current.getDelta(this.interaction.previous),
             firstChild = this.children[0],
-            lastChild  = this.children[this.children.length-1]
+            lastChild  = this.children[this.children.length-1],
+            swapChild
         ;
+
+
+        // move children
         for (var i = 0; i < this.children.length; i++) {
             child = this.children[i];
-            child.movePos(moveDelta);
+            child.movePos(this.deltas.currentMove);
         }
+
+        // do the swapping
         if (firstChild.pos.x < -700){
             firstChild = this.children.shift();
             firstChild.clean();
             this.children.push(firstChild);
-            this._updateSlots();
-            firstChild.loading();
-            firstChild.render();
+            swapChild = firstChild;
         }
         if (lastChild.pos.x > 1200){
             lastChild = this.children.pop();
             lastChild.clean();
             this.children.unshift(lastChild);
-            this._updateSlots();
-            lastChild.loading();
-            lastChild.render();
+            swapChild = lastChild;
         }
+        if (swapChild){
+            this._updateSlots();
+            swapChild._updateOrigin();
+            swapChild.loading().render();
+        }
+
     },
     _updateSlots: function(){
         var child;
@@ -230,6 +254,11 @@ Vec2.prototype = {
         this.y-=v.y;
         return this;
     },
+    multiply: function(v){
+        this.x*=v.x;
+        this.y*=v.y;
+        return this;
+    },
     mod: function(v){
         this.x = this.x % v.x;
         this.y = this.y % v.y;
@@ -237,12 +266,11 @@ Vec2.prototype = {
     },
 
     // functions which don't change the object
-
-    // return the difference
-    // this = 200, v = 300 => 100
-    // this = 200, v = -10 => 210
-    getDelta: function(v){
+    getMinus: function(v){
         return this.clone().minus(v);
+    },
+    getMultiply: function(v){
+        return this.clone().multiply(v);
     },
     getMod: function(v){
         return this.clone().mod(v);
@@ -266,37 +294,37 @@ Vec2.prototype = {
 /**
  * Child Container
  */
-var Child = Mother.Child = function(slot){
-    this._initialize(slot);
+var Child = Mother.Child = function(slot, mother){
+    this._initialize(slot, mother);
 };
 Child.prototype = {
-    dimensions: new Vec2(200, 0),
-    _initialize: function(slot){
+
+    _initialize: function(slot, mother){
         var that = this;
 
-
         this.el = document.createElement('div');
-
-        this.loading();
+        this.mother = mother;
+        this.dimensions = this.mother.dimensions.child;
 
         // defaults
         this.deltas = {
-            slot  : new Vec2(0,0),
-            moved : new Vec2(0,0)
+            slot   : new Vec2(0,0),
+            origin : new Vec2(0,0)
         };
 
+        this.loading();
         this.setSlot(slot);
-        this.render();
+        this._updateOrigin();
         this.updateStyle();
-
+        this.render();
+        this.load();
+    },
+    _updateOrigin: function(){
+        this.deltas.origin.set(this.mother.deltas.children.x + this.slot-3, 0);
     },
     loading: function(on){
-        on = on === false ? on : true;
-        if (on){
-            this.el.className = 'mother__child mother__child--loading';
-        } else {
-            this.el.className = 'mother__child';
-        }
+        this.el.className = 'mother__child'+ (on === false ? '' : ' mother__child--loading');
+        return this;
     },
     setSlot: function(slot){
         var delta,
@@ -315,7 +343,7 @@ Child.prototype = {
                 0
             );
         } else {
-            moved = this.pos.getDelta(prevDelta).getMod(this.dimensions);
+            moved = this.pos.getMinus(prevDelta).getMod(this.dimensions);
             if (moved.x < 0){
                 moved.plus(this.dimensions);
             }
@@ -324,18 +352,22 @@ Child.prototype = {
                 0
             );
         }
+
     },
     movePos: function(delta){
         this.pos.plus(delta);
         this.updateStyle();
     },
     render: function(){
-        var that = this;
-        this.el.innerHTML = this.slot;
-        // mock loaded
-        setTimeout(function(){that.loading(false);}, Math.random() * 2000);
+        this.content = new this.mother.ChildContent(this.mother, this);
+        this.content.render();
+    },
+    load: function(){
+        this.content.load();
     },
     clean: function(){
+        this.content.clean();
+        this.content = null;
     },
     updateStyle: function(){
         this.el.style[transform] = this.pos.translateStyle();
