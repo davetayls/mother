@@ -13,6 +13,7 @@
             height: 300px;
             width: 600px;
             margin: -150px 0 0 -300px;
+            overflow: hidden;
         }
         .mother__child {
             font-size: 40px;
@@ -45,31 +46,22 @@
     <script type="text/x-tmpl">
         <div class="child">child</div>
     </script>
-    <div id="simple">
-        <div id="start" class="point"></div>
-        <div id="current" class="point"></div>
-        <div id="origin" class="point"></div>
-    </div>
+    <div id="simple"></div>
     <script src="mother.js"></script>
     <script>
-        var m = new Mother('#simple');
+        document.addEventListener('touchmove', function (e) { e.preventDefault(); }, false);
+        function Item() {
+        }
+        Item.prototype = {
+            render: function(){
 
+            },
+            clean: function(){
 
-        var start = document.getElementById('start'),
-            current = document.getElementById('current')
-            origin = document.getElementById('origin')
-        ;
-        setInterval(function(){
-            start.style.left = m.interaction.start.x +'px';
-            start.style.top = m.interaction.start.y +'px';
+            }
+        };
 
-            current.style.left = m.interaction.current.x +'px';
-            current.style.top = m.interaction.current.y +'px';
-
-            origin.style.left = m.interaction.origin.x +'px';
-            origin.style.top = m.interaction.origin.y +'px';
-
-        }, 1000/10);
+        var m = new Mother('#simple', Item);
     </script>
 
 

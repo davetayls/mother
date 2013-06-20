@@ -77,7 +77,7 @@ Mother.prototype = {
         (el || this.el).removeEventListener(type, this, !!bubble);
     },
     _start: function(e){
-        var point = hasTouch ? e.originalEvent.touches[0] : e
+        var point = hasTouch ? e.touches[0] : e
         ;
         e.preventDefault();
 
@@ -106,7 +106,7 @@ Mother.prototype = {
     },
     _move: function(e){
         var that = this,
-            point = hasTouch ? e.originalEvent.touches[0] : e,
+            point = hasTouch ? e.touches[0] : e,
             timestamp = e.timeStamp || Date.now()
         ;
 
@@ -138,7 +138,7 @@ Mother.prototype = {
         clearTimeout(this._loadTimeout);
         this._loadTimeout = null;
 
-        var point = hasTouch ? e.originalEvent.touches[0] : e,
+        var point = hasTouch ? e.touches[0] : e,
             timestamp = e.timeStamp || Date.now(),
             duration  = timestamp - this.interaction.origin.time
         ;
@@ -170,13 +170,19 @@ Mother.prototype = {
         }
         if (firstChild.pos.x < -700){
             firstChild = this.children.shift();
+            firstChild.clean();
             this.children.push(firstChild);
             this._updateSlots();
+            firstChild.loading();
+            firstChild.render();
         }
         if (lastChild.pos.x > 1200){
             lastChild = this.children.pop();
+            lastChild.clean();
             this.children.unshift(lastChild);
             this._updateSlots();
+            lastChild.loading();
+            lastChild.render();
         }
     },
     _updateSlots: function(){
@@ -272,8 +278,6 @@ Child.prototype = {
         this.el = document.createElement('div');
 
         this.loading();
-        // mock loaded
-        setTimeout(function(){that.loading(false);}, Math.random() * 2000);
 
         // defaults
         this.deltas = {
@@ -284,6 +288,7 @@ Child.prototype = {
         this.setSlot(slot);
         this.render();
         this.updateStyle();
+
     },
     loading: function(on){
         on = on === false ? on : true;
@@ -325,7 +330,12 @@ Child.prototype = {
         this.updateStyle();
     },
     render: function(){
+        var that = this;
         this.el.innerHTML = this.slot;
+        // mock loaded
+        setTimeout(function(){that.loading(false);}, Math.random() * 2000);
+    },
+    clean: function(){
     },
     updateStyle: function(){
         this.el.style[transform] = this.pos.translateStyle();
