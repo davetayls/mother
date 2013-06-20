@@ -18,13 +18,15 @@ function Mother(el, ChildContent) {
     this.ChildContent = ChildContent;
 
     // container dimensions
-    this.dimensions = {
-        mother: new Vec2(
-            this.el.offsetWidth,
-            this.el.offsetHeight
-        ),
-        child: new Vec2(200, 0)
-    };
+    this.dimensions = {};
+    this.dimensions.mother = new Vec2(
+            this.el.clientWidth,
+            this.el.clientHeight
+    );
+    this.dimensions.child = new Vec2(200, 300);
+    this.dimensions.inView = Math.ceil(this.dimensions.mother.x / this.dimensions.child.x);
+    this.leftBorder = -(this.dimensions.inView * this.dimensions.child.x) -100;
+    this.rightBorder = (2 * this.dimensions.inView) * this.dimensions.child.x;
 
     this.initiated = false;
     this.isDecelerating = false;
@@ -51,7 +53,7 @@ Mother.prototype = {
     _populate: function(){
         var child;
         this.children = [];
-        for (var i = 0; i < 9; i++) {
+        for (var i = 0; i < this.dimensions.inView * 3; i++) {
             child = new Child(i, this);
             this.children.push(child);
             this.el.appendChild(child.el);
@@ -93,9 +95,7 @@ Mother.prototype = {
         if ( this.initiated ) return;
         this.initiated = true;
 
-        clearTimeout(this._loadTimeout);
-        this._loadTimeout = null;
-
+        this._delayLoad();
 
         // set interaction details
         this.interaction.start.set(point.pageX, point.pageY);
@@ -115,9 +115,6 @@ Mother.prototype = {
             timestamp = e.timeStamp || Date.now()
         ;
 
-        clearTimeout(this._loadTimeout);
-        this._loadTimeout = null;
-
         // update interaction details
         this.interaction.previous.copy(this.interaction.current);
         this.interaction.current.set(point.pageX, point.pageY);
@@ -134,34 +131,26 @@ Mother.prototype = {
 
 
         this._updateChildren();
+        this._delayLoad();
 
         if ( timestamp - this.interaction.context.time > 300 ) {
             this.interaction.context.time = timestamp;
             this.interaction.context.copy(this.interaction.current);
-
-            this._loadTimeout = setTimeout(function () { that._load(); }, 100);
         }
 
     },
     _end: function (e) {
         if ( hasTouch && e.changedTouches.length > 1 ) return;
 
-        clearTimeout(this._loadTimeout);
-        this._loadTimeout = null;
-
-        var point = hasTouch ? e.touches[0] : e,
-            timestamp = e.timeStamp || Date.now(),
+        var timestamp = e.timeStamp || Date.now(),
             duration  = timestamp - this.interaction.context.time
         ;
 
-        // probably a click
+        // probably just a click
         if (duration < 300){
             console.log('duration < 300');
-
-        // otherwise we have probably moved
-        } else {
-            this._load();
         }
+        this._delayLoad();
 
         // clean up
         this.initiated = false;
@@ -170,9 +159,15 @@ Mother.prototype = {
         this._unbind(cancelEv, document);
     },
 
+    _delayLoad: function(delay){
+        var that = this;
+        clearTimeout(this._loadTimeout);
+        this._loadTimeout = null;
+        this._loadTimeout = setTimeout(function () { that._load(); }, delay || 200);
+    },
     _load: function(){
         for (var i = 0; i < this.children.length; i++) {
-            this.children[i].load();
+            this.children[i]._load();
         }
     },
     _updateChildren: function(){
@@ -186,17 +181,17 @@ Mother.prototype = {
         // move children
         for (var i = 0; i < this.children.length; i++) {
             child = this.children[i];
-            child.movePos(this.deltas.currentMove);
+            child._movePos(this.deltas.currentMove);
         }
 
         // do the swapping
-        if (firstChild.pos.x < -700){
+        if (firstChild.pos.x < this.leftBorder){
             firstChild = this.children.shift();
             firstChild.clean();
             this.children.push(firstChild);
             swapChild = firstChild;
         }
-        if (lastChild.pos.x > 1200){
+        if (lastChild.pos.x > this.rightBorder){
             lastChild = this.children.pop();
             lastChild.clean();
             this.children.unshift(lastChild);
@@ -213,7 +208,7 @@ Mother.prototype = {
         var child;
         for (var i = 0; i < this.children.length; i++) {
             child = this.children[i];
-            child.setSlot(i);
+            child._setSlot(i);
             child.updateStyle();
         }
     }
@@ -276,20 +271,21 @@ Vec2.prototype = {
         return this.clone().mod(v);
     },
 
-    // for readability
-    width: function(){
-        return this.x;
-    },
-    height: function(){
-        return this.h;
-    },
-
     // style
     translateStyle: function(){
         // we're only interested in the x axis at the moment
         return 'translate(' + this.x + 'px,' + 0 + 'px)' + translateZ;
     }
 };
+
+
+
+
+
+
+
+
+
 
 /**
  * Child Container
@@ -313,20 +309,19 @@ Child.prototype = {
         };
 
         this.loading();
-        this.setSlot(slot);
+        this._setSlot(slot);
         this._updateOrigin();
         this.updateStyle();
         this.render();
-        this.load();
+        this._load();
     },
     _updateOrigin: function(){
-        this.deltas.origin.set(this.mother.deltas.children.x + this.slot-3, 0);
+        this.deltas.origin.set(this.mother.deltas.children.x + this.slot-this.mother.dimensions.inView, 0);
     },
-    loading: function(on){
-        this.el.className = 'mother__child'+ (on === false ? '' : ' mother__child--loading');
-        return this;
+    _load: function(){
+        this.content.load();
     },
-    setSlot: function(slot){
+    _setSlot: function(slot){
         var delta,
             prevSlot = this.slot,
             prevDelta = this.pos ? this.deltas.slot.clone() : null,
@@ -334,7 +329,7 @@ Child.prototype = {
         ;
 
         this.slot = slot;
-        this.deltas.slot.set((this.slot-3) * this.dimensions.x, 0);
+        this.deltas.slot.set((this.slot-this.mother.dimensions.inView) * this.dimensions.x, 0);
 
         if (!this.pos){
             this.pos = new Vec2();
@@ -354,16 +349,18 @@ Child.prototype = {
         }
 
     },
-    movePos: function(delta){
+    _movePos: function(delta){
         this.pos.plus(delta);
         this.updateStyle();
+    },
+
+    loading: function(on){
+        this.el.className = 'mother__child'+ (on === false ? '' : ' mother__child--loading');
+        return this;
     },
     render: function(){
         this.content = new this.mother.ChildContent(this.mother, this);
         this.content.render();
-    },
-    load: function(){
-        this.content.load();
     },
     clean: function(){
         this.content.clean();
@@ -373,6 +370,14 @@ Child.prototype = {
         this.el.style[transform] = this.pos.translateStyle();
     }
 };
+
+
+
+
+
+
+
+
 
 // ---------------------------------------------
 // CROSS BROWSER SETUP
