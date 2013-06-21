@@ -87,23 +87,24 @@ Mother.prototype = {
         (el || this.el).removeEventListener(type, this, !!bubble);
     },
     _start: function(e){
-        var point = hasTouch ? e.touches[0] : e
+        var i = this.interaction,
+            point = hasTouch ? e.touches[0] : e
         ;
         e.preventDefault();
 
         // reset existing movements
-        if ( this.initiated ) return;
+        if (this.initiated) return;
         this.initiated = true;
 
         this._delayLoad();
 
         // set interaction details
-        this.interaction.start.set(point.pageX, point.pageY);
-        this.interaction.start.time = e.timeStamp || Date.now();
-        this.interaction.context.copy(this.interaction.start);
-        this.interaction.context.time = this.interaction.start.time;
+        i.start.set(point.pageX, point.pageY);
+        i.start.time = e.timeStamp || Date.now();
+        i.context.copy(i.start);
+        i.context.time = i.start.time;
 
-        this.interaction.current.copy(this.interaction.start);
+        i.current.copy(i.start);
 
         this._bind(moveEv, document);
         this._bind(endEv, document);
@@ -111,21 +112,23 @@ Mother.prototype = {
     },
     _move: function(e){
         var that = this,
+            i = this.interaction,
+            d = this.deltas,
             point = hasTouch ? e.touches[0] : e,
             timestamp = e.timeStamp || Date.now()
         ;
 
         // update interaction details
-        this.interaction.previous.copy(this.interaction.current);
-        this.interaction.current.set(point.pageX, point.pageY);
-        this.interaction.current.time = e.timeStamp || Date.now();
+        i.previous.copy(i.current);
+        i.current.set(point.pageX, point.pageY);
+        i.current.time = e.timeStamp || Date.now();
 
         // update deltas
-        this.deltas.currentMove = this.interaction.current.getMinus(this.interaction.previous),
-        this.deltas.distance.plus(this.deltas.currentMove.getMultiply({ x: -1, y: -1}));
-        this.deltas.children.set(
-            Math.ceil(this.deltas.distance.x / this.dimensions.child.x),
-            Math.ceil(this.deltas.distance.y / this.dimensions.child.y)
+        d.currentMove = i.current.getMinus(this.interaction.previous),
+        d.distance.plus(d.currentMove.getMultiply({ x: -1, y: -1}));
+        d.children.set(
+            Math.ceil(d.distance.x / this.dimensions.child.x),
+            Math.ceil(d.distance.y / this.dimensions.child.y)
         );
 
 
@@ -133,9 +136,9 @@ Mother.prototype = {
         this._updateChildren();
         this._delayLoad();
 
-        if ( timestamp - this.interaction.context.time > 300 ) {
-            this.interaction.context.time = timestamp;
-            this.interaction.context.copy(this.interaction.current);
+        if ( timestamp - i.context.time > 300 ) {
+            i.context.time = timestamp;
+            i.context.copy(i.current);
         }
 
     },
