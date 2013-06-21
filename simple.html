@@ -70,6 +70,7 @@
             this.child  = child;
         }
         Item.prototype = {
+            dimensions: new Mother.Vec2(200,300),
             render: function(){
                 var child = this.child;
                 child.el.innerHTML = child.deltas.origin.x;

@@ -23,7 +23,14 @@ function Mother(el, ChildContent) {
             this.el.clientWidth,
             this.el.clientHeight
     );
-    this.dimensions.child = new Vec2(200, 300);
+    if (ChildContent.prototype.dimensions){
+        this.dimensions.child = new Vec2(
+            ChildContent.prototype.dimensions.x,
+            ChildContent.prototype.dimensions.y
+        );
+    } else {
+        this.dimensions.child = new Vec2(200, 300);
+    }
     this.dimensions.inView = Math.ceil(this.dimensions.mother.x / this.dimensions.child.x);
     this.leftBorder = -(this.dimensions.inView * this.dimensions.child.x) -100;
     this.rightBorder = (2 * this.dimensions.inView) * this.dimensions.child.x;
