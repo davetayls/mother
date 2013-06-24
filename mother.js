@@ -54,7 +54,10 @@ function Mother(el, ChildContent) {
     this.render();
 }
 Mother.prototype = {
-    loadDelay: 300,
+
+    loadDelay   : 300,
+    maxSpeed    : 3,
+
     render: function(){
         this._populate();
         this._bind(startEv);
@@ -100,6 +103,7 @@ Mother.prototype = {
     on: function(eventName, fn){
         this.listeners[eventName] = this.listeners[eventName] || [];
         this.listeners[eventName].push(fn);
+        return this;
     },
     _trigger: function(eventName){
         if (typeof this.listeners[eventName]){
@@ -107,6 +111,7 @@ Mother.prototype = {
                 this.listeners[eventName][i].call(this);
             }
         }
+        return this;
     },
 
 
@@ -128,26 +133,32 @@ Mother.prototype = {
             Math.ceil(d.distance.x / this.dimensions.child.x),
             0
         );
+        this._trigger('position.set');
     },
     _start: function(e){
         var i = this.interaction,
             point = hasTouch ? e.touches[0] : e
         ;
-        e.preventDefault();
 
         // reset existing movements
         if (this.initiated) return;
         this.initiated = true;
+        e.preventDefault();
 
         this._delayLoad();
+
+        if ( this.isDecelerating ) {
+            this.isDecelerating = false;
+            this._setPosition(i.current);
+        }
 
         // set interaction details
         i.start.set(point.pageX, point.pageY);
         i.start.time = e.timeStamp || Date.now();
         i.context.copy(i.start);
         i.context.time = i.start.time;
-
         i.current.copy(i.start);
+
 
         this._bind(moveEv, document);
         this._bind(endEv, document);
@@ -176,12 +187,13 @@ Mother.prototype = {
 
         var i = this.interaction,
             timestamp = e.timeStamp || Date.now(),
-            duration  = timestamp - i.context.time
+            duration  = timestamp - i.context.time,
+            newX
         ;
 
         // probably just a click
         if (duration < 300){
-            newX = destination(i.current.x - i.context.x, duration);
+            newX = this.destination(i.current.x - i.context.x, duration);
             this._momentum(
                 i.current.x + newX.distance,
                 newX.duration
@@ -203,6 +215,8 @@ Mother.prototype = {
             that = this;
 
         function frame () {
+            if ( !that.isDecelerating ) return;
+
             var now = Date.now(),
                 newX,
                 easeOut;
@@ -221,11 +235,23 @@ Mother.prototype = {
             that._setPosition(new Vec2(newX, 0));
             that._updateChildren();
 
-            if ( that.isDecelerating ) requestFrame(frame);
+            requestFrame(frame);
         }
 
         this.isDecelerating = true;
         frame();
+    },
+    destination: function(distance, time) {
+        var speed = Math.min(Math.abs(distance) / time, this.maxSpeed),
+            friction = 0.0025
+        ;
+        distance = ( speed * speed ) / ( 2 * friction ) * ( distance < 0 ? -1 : 1 );
+        time = speed / friction;
+
+        return {
+            distance: Math.round(distance),
+            duration: Math.round(time)
+        };
     },
 
     _delayLoad: function(delay){
@@ -270,6 +296,7 @@ Mother.prototype = {
             this._updateSlots();
             swapChild._updateOrigin();
             swapChild.loading().render();
+            this._trigger('updateChildren.swap');
         }
 
     },
@@ -515,16 +542,6 @@ var dummyStyle = document.createElement('i').style,
     translateZ = has3d ? ' translateZ(0)' : ''
 
 ;
-
-function destination (distance, time) {
-    var speed = Math.abs(distance) / time,
-        friction = 0.0025;
-
-    distance = ( speed * speed ) / ( 2 * friction ) * ( distance < 0 ? -1 : 1 );
-    time = speed / friction;
-
-    return { distance: Math.round(distance), duration: Math.round(time) };
-}
 
 function prefixStyle(style) {
     if ( vendor === '' ) return style;
