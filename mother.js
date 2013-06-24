@@ -43,20 +43,21 @@ function Mother(el, ChildContent) {
         start       : new Vec2(), // initial point at touch / mouse start
         current     : new Vec2(), // latest point
         previous    : new Vec2(), // previous point
-        context      : new Vec2()  // context for decelleration
+        context     : new Vec2()  // context for decelleration
     };
     this.deltas = {
         distance    : new Vec2(0,0), // distance tavelled since beginning
         children    : new Vec2(0,0), // children travelled since beginning
         currentMove : new Vec2()    // delta from previous to current
     };
-
-    this._populate();
-
-    this._bind(startEv);
-
+    this.render();
 }
 Mother.prototype = {
+    loadDelay: 300,
+    render: function(){
+        this._populate();
+        this._bind(startEv);
+    },
     _populate: function(){
         var child;
         this.children = [];
@@ -93,6 +94,24 @@ Mother.prototype = {
     _unbind: function (type, el, bubble) {
         (el || this.el).removeEventListener(type, this, !!bubble);
     },
+    _setPosition: function(v){
+        var i = this.interaction,
+            d = this.deltas
+        ;
+
+        // update interaction details
+        i.previous.copy(i.current);
+        i.current.copy(v);
+        i.current.time = Date.now();
+
+        // update deltas
+        d.currentMove.copy(i.current.getMinus(i.previous)),
+        d.distance.plus(d.currentMove.getMultiply({ x: -1, y: -1}));
+        d.children.set(
+            Math.ceil(d.distance.x / this.dimensions.child.x),
+            0
+        );
+    },
     _start: function(e){
         var i = this.interaction,
             point = hasTouch ? e.touches[0] : e
@@ -125,21 +144,7 @@ Mother.prototype = {
             timestamp = e.timeStamp || Date.now()
         ;
 
-        // update interaction details
-        i.previous.copy(i.current);
-        i.current.set(point.pageX, point.pageY);
-        i.current.time = e.timeStamp || Date.now();
-
-        // update deltas
-        d.currentMove = i.current.getMinus(this.interaction.previous),
-        d.distance.plus(d.currentMove.getMultiply({ x: -1, y: -1}));
-        d.children.set(
-            Math.ceil(d.distance.x / this.dimensions.child.x),
-            Math.ceil(d.distance.y / this.dimensions.child.y)
-        );
-
-
-
+        this._setPosition(new Vec2(point.pageX, point.pageY));
         this._updateChildren();
         this._delayLoad();
 
@@ -152,15 +157,21 @@ Mother.prototype = {
     _end: function (e) {
         if ( hasTouch && e.changedTouches.length > 1 ) return;
 
-        var timestamp = e.timeStamp || Date.now(),
-            duration  = timestamp - this.interaction.context.time
+        var i = this.interaction,
+            timestamp = e.timeStamp || Date.now(),
+            duration  = timestamp - i.context.time
         ;
 
         // probably just a click
         if (duration < 300){
-            console.log('duration < 300');
+            newX = destination(i.current.x - i.context.x, duration);
+            this._momentum(
+                i.current.x + newX.distance,
+                newX.duration
+            );
+        } else {
+            this._load();
         }
-        this._delayLoad();
 
         // clean up
         this.initiated = false;
@@ -168,12 +179,43 @@ Mother.prototype = {
         this._unbind(endEv, document);
         this._unbind(cancelEv, document);
     },
+    _momentum: function (destX, duration) {
+        var i = this.interaction,
+            startTime = Date.now(),
+            startX = i.current.x,
+            that = this;
+
+        function frame () {
+            var now = Date.now(),
+                newX,
+                easeOut;
+
+            if ( now >= startTime + duration ) {
+                that.isDecelerating = false;
+                that._setPosition(new Vec2(destX, 0));
+                that._load();
+                return;
+            }
+
+            now = (now - startTime) / duration;
+            easeOut = Math.sqrt(1 - ( --now * now ));
+            newX = (destX - startX) * easeOut + startX;
+
+            that._setPosition(new Vec2(newX, 0));
+            that._updateChildren();
+
+            if ( that.isDecelerating ) requestFrame(frame);
+        }
+
+        this.isDecelerating = true;
+        frame();
+    },
 
     _delayLoad: function(delay){
         var that = this;
         clearTimeout(this._loadTimeout);
         this._loadTimeout = null;
-        this._loadTimeout = setTimeout(function () { that._load(); }, delay || 200);
+        this._loadTimeout = setTimeout(function () { that._load(); }, delay || this.loadDelay);
     },
     _load: function(){
         for (var i = 0; i < this.children.length; i++) {
@@ -284,7 +326,7 @@ Vec2.prototype = {
     // style
     translateStyle: function(){
         // we're only interested in the x axis at the moment
-        return 'translate(' + this.x + 'px,' + 0 + 'px)' + translateZ;
+        return 'translate(' + this.x + 'px, 0px)' + translateZ;
     }
 };
 
@@ -326,7 +368,9 @@ Child.prototype = {
         this._load();
     },
     _updateOrigin: function(){
-        this.deltas.origin.set(this.mother.deltas.children.x + this.slot-this.mother.dimensions.inView, 0);
+        this.deltas.origin.set(
+            this.mother.deltas.children.x + this.slot-this.mother.dimensions.inView,
+        0);
     },
     _load: function(){
         this.content.load();
@@ -454,6 +498,16 @@ var dummyStyle = document.createElement('i').style,
     translateZ = has3d ? ' translateZ(0)' : ''
 
 ;
+
+function destination (distance, time) {
+    var speed = Math.abs(distance) / time,
+        friction = 0.0025;
+
+    distance = ( speed * speed ) / ( 2 * friction ) * ( distance < 0 ? -1 : 1 );
+    time = speed / friction;
+
+    return { distance: Math.round(distance), duration: Math.round(time) };
+}
 
 function prefixStyle(style) {
     if ( vendor === '' ) return style;
