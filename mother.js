@@ -106,7 +106,7 @@ Mother.prototype = {
         return this;
     },
     _trigger: function(eventName){
-        if (typeof this.listeners[eventName]){
+        if (this.listeners[eventName]){
             for (var i=0; i < this.listeners[eventName].length; i++){
                 this.listeners[eventName][i].call(this);
             }
