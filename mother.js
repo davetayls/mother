@@ -13,6 +13,7 @@
  * Main Constructor
  */
 function Mother(el, ChildContent) {
+    this.listeners = {};
 
     this.el = typeof el === 'string' ? document.querySelector(el) : el;
     this.ChildContent = ChildContent;
@@ -67,6 +68,8 @@ Mother.prototype = {
             this.el.appendChild(child.el);
         }
     },
+
+    // Eventing
     handleEvent: function(e){
         switch ( e.type ) {
             case startEv:
@@ -94,6 +97,20 @@ Mother.prototype = {
     _unbind: function (type, el, bubble) {
         (el || this.el).removeEventListener(type, this, !!bubble);
     },
+    on: function(eventName, fn){
+        this.listeners[eventName] = this.listeners[eventName] || [];
+        this.listeners[eventName].push(fn);
+    },
+    _trigger: function(eventName){
+        if (typeof this.listeners[eventName]){
+            for (var i=0; i < this.listeners[eventName].length; i++){
+                this.listeners[eventName][i].call(this);
+            }
+        }
+    },
+
+
+
     _setPosition: function(v){
         var i = this.interaction,
             d = this.deltas
