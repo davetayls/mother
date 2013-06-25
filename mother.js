@@ -378,24 +378,28 @@ Vec2.prototype = {
         return this.x === v.x && this.y === v.y;
     },
     plus: function(v){
-        this.x+=v.x;
-        this.y+=v.y;
-        return this;
+        return this.set(
+            this.x+v.x,
+            this.y+v.y
+        );
     },
     minus: function(v){
-        this.x-=v.x;
-        this.y-=v.y;
-        return this;
+        return this.set(
+            this.x-v.x,
+            this.y-v.y
+        );
     },
     multiply: function(v){
-        this.x*=v.x;
-        this.y*=v.y;
-        return this;
+        return this.set(
+            this.x*v.x,
+            this.y*v.y
+        );
     },
     mod: function(v){
-        this.x = this.x % v.x;
-        this.y = this.y % v.y;
-        return this;
+        return this.set(
+            this.x % v.x,
+            this.y % v.y
+        );
     },
 
     // functions which don't change the object
