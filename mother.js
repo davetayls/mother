@@ -18,26 +18,10 @@ function Mother(el, ChildContent) {
     this.el = typeof el === 'string' ? document.querySelector(el) : el;
     this.ChildContent = ChildContent;
 
-    // container dimensions
-    this.dimensions = {};
-    this.dimensions.mother = new Vec2(
-            this.el.clientWidth,
-            this.el.clientHeight
-    );
-    if (ChildContent.prototype.dimensions){
-        this.dimensions.child = new Vec2(
-            ChildContent.prototype.dimensions.x,
-            ChildContent.prototype.dimensions.y
-        );
-    } else {
-        this.dimensions.child = new Vec2(200, 300);
-    }
-    this.dimensions.inView = Math.ceil(this.dimensions.mother.x / this.dimensions.child.x);
-    this.leftBorder = -(this.dimensions.inView * this.dimensions.child.x) -100;
-    this.rightBorder = (2 * this.dimensions.inView) * this.dimensions.child.x;
-
     this.initiated = false;
     this.isDecelerating = false;
+
+    this._setDimensions();
 
     // details about interactions
     this.interaction = {
@@ -47,20 +31,50 @@ function Mother(el, ChildContent) {
         context     : new Vec2()  // context for decelleration
     };
     this.deltas = {
+        swap        : -this.dimensions.inView, // swap diff from beginning
         distance    : new Vec2(0,0), // distance tavelled since beginning
         children    : new Vec2(0,0), // children travelled since beginning
-        currentMove : new Vec2()    // delta from previous to current
+        currentMove : new Vec2()     // delta from previous to current
     };
     this.render();
 }
 Mother.prototype = {
 
-    loadDelay   : 300,
-    maxSpeed    : 3,
+    loadDelay        : 300,
+    triggerDistance  : 10,
+    maxSpeed         : 3,
 
     render: function(){
         this._populate();
         this._bind(startEv);
+    },
+    _setDimensions: function(){
+
+        // container dimensions
+        this.dimensions = {};
+        this.dimensions.mother = new Vec2(
+                this.el.clientWidth,
+                this.el.clientHeight
+        );
+
+        // Child dimensions
+        if (this.ChildContent.prototype.dimensions){
+            this.dimensions.child = new Vec2(
+                this.ChildContent.prototype.dimensions.x,
+                this.ChildContent.prototype.dimensions.y
+            );
+        } else {
+            this.dimensions.child = new Vec2(200, 300);
+        }
+
+        // how many children can be visible at one time
+        this.dimensions.inView = Math.ceil(this.dimensions.mother.x / this.dimensions.child.x);
+
+        // the point at which we need to do some swaps
+        this.boundary = {
+            left: -(this.dimensions.inView * this.dimensions.child.x) -100,
+            right: (2 * this.dimensions.inView) * this.dimensions.child.x
+        };
     },
     _populate: function(){
         var child;
@@ -176,6 +190,10 @@ Mother.prototype = {
         this._updateChildren();
         this._delayLoad();
 
+        if (Math.abs(d.currentMove.x) < this.triggerDistance){
+            this.isMoved = true;
+        }
+
         if ( timestamp - i.context.time > 300 ) {
             i.context.time = timestamp;
             i.context.copy(i.current);
@@ -191,7 +209,6 @@ Mother.prototype = {
             newX
         ;
 
-        // probably just a click
         if (duration < 300){
             newX = this.destination(i.current.x - i.context.x, duration);
             this._momentum(
@@ -216,6 +233,7 @@ Mother.prototype = {
 
         function frame () {
             if ( !that.isDecelerating ) return;
+            that._delayLoad();
 
             var now = Date.now(),
                 newX,
@@ -225,6 +243,7 @@ Mother.prototype = {
                 that.isDecelerating = false;
                 that._setPosition(new Vec2(destX, 0));
                 that._load();
+                that._trigger('momentum.stop');
                 return;
             }
 
@@ -261,9 +280,13 @@ Mother.prototype = {
         this._loadTimeout = setTimeout(function () { that._load(); }, delay || this.loadDelay);
     },
     _load: function(){
+        clearTimeout(this._loadTimeout);
+        this._loadTimeout = null;
+
         for (var i = 0; i < this.children.length; i++) {
             this.children[i]._load();
         }
+        this._trigger('load');
     },
     _updateChildren: function(){
         var child,
@@ -280,25 +303,40 @@ Mother.prototype = {
         }
 
         // do the swapping
-        if (firstChild.pos.x < this.leftBorder){
-            firstChild = this.children.shift();
-            firstChild.clean();
-            this.children.push(firstChild);
-            swapChild = firstChild;
+        if (firstChild.pos.x < this.boundary.left){
+            this.shift();
         }
-        if (lastChild.pos.x > this.rightBorder){
-            lastChild = this.children.pop();
-            lastChild.clean();
-            this.children.unshift(lastChild);
-            swapChild = lastChild;
+        if (lastChild.pos.x > this.boundary.right){
+            this.pop();
         }
-        if (swapChild){
-            this._updateSlots();
-            swapChild._updateOrigin();
-            swapChild.loading().render();
-            this._trigger('updateChildren.swap');
-        }
+    },
+    /**
+     * Shift a child from the beginning of the stack
+     * and place it at the end
+     */
+    shift: function(){
+        var firstChild = this.children.shift();
+        firstChild.clean();
+        this.children.push(firstChild);
+        this.deltas.swap++;
 
+        this._updateSlots();
+        firstChild._updateOrigin();
+        firstChild.loading().render();
+    },
+    /**
+     * Pop a child from the end of the stack and
+     * place it at the beginning
+     */
+    pop: function(){
+        var lastChild = this.children.pop();
+        lastChild.clean();
+        this.children.unshift(lastChild);
+        this.deltas.swap--;
+
+        this._updateSlots();
+        lastChild._updateOrigin();
+        lastChild.loading().render();
     },
     _updateSlots: function(){
         var child;
@@ -314,12 +352,16 @@ Mother.prototype = {
  * Simple 2 dimensional Vector
  */
 var Vec2 = Mother.Vec2 = function(x,y) {
+    this.listeners = [];
     this.set(x, y);
 };
 Vec2.prototype = {
+    on: Mother.prototype.on,
+    _trigger: Mother.prototype._trigger,
     set: function(x, y){
         this.x = x;
         this.y = y;
+        this._trigger('set');
         return this;
     },
     copy: function(v){
@@ -390,10 +432,13 @@ var Child = Mother.Child = function(slot, mother){
     this._initialize(slot, mother);
 };
 Child.prototype = {
+    on: Mother.prototype.on,
+    _trigger: Mother.prototype._trigger,
 
     _initialize: function(slot, mother){
         var that = this;
 
+        this.listeners = [];
         this.el = document.createElement('div');
         this.mother = mother;
         this.dimensions = this.mother.dimensions.child;

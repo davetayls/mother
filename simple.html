@@ -13,7 +13,7 @@
             height: 300px;
             width: 600px;
             margin: -150px 0 0 -300px;
-            overflow: hidden;
+            /*overflow: hidden;*/
         }
         #simple:after {
             display: block;
@@ -34,13 +34,11 @@
             position: absolute;
             left: 0;
             top: 0;
-            background: rgba(0, 255, 0, 0.5);
-            width: 200px;
+            background: rgba(0, 255, 0, 0.3);
+            border-left: solid 1px #000;
+            width: 199px;
             height: 100%;
             float: left;
-        }
-        .mother__child:nth-child(2n){
-            background: rgba(0,0,255,0.5);
         }
         .mother__child--loading {
             background: rgba(255, 0, 0, 0.5);
@@ -82,7 +80,7 @@
             dimensions: new Mother.Vec2(200,300),
             render: function(){
                 var child = this.child;
-                child.el.innerHTML = child.deltas.origin.x;
+                child.el.innerHTML = '<a href="#item">'+ child.deltas.origin.x +'</a>';
             },
             load: function(){
                 this.child.loading(false);
@@ -94,13 +92,23 @@
         var dist = document.getElementById('distance');
 
         var m = new Mother('#simple', Item);
-        m.on('position.set', function(){
-            dist.innerHTML = m.deltas.distance.x + ' - '+ m.deltas.children.x;
+        function update() {
+            dist.innerHTML = [
+                'distance: '+ m.deltas.distance.x,
+                'children from origin: '+ m.deltas.children.x,
+                'currentMove: '+ m.deltas.currentMove.x,
+                'swap: '+ m.deltas.swap
+            ].join('<br>')
             stats.update();
+        }
+        m.on('position.set', function(){
+            update();
         })
-        .on('updateChildren.swap', function(){
-        })
+        m.on('load', function(){
+            console.log('load');
+        });
         ;
+        update();
     </script>
 
 
