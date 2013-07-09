@@ -27,15 +27,17 @@
             border-right: solid 1px green;
         }
         .mother__child {
-            font-size: 40px;
+            font-size: 20px;
             text-align: center;
-            line-height: 290px;
+            line-height: 2;
 
             position: absolute;
             left: 0;
             top: 0;
             background: rgba(0, 255, 0, 0.3);
             border-left: solid 1px #000;
+            box-sizing: border-box;
+            padding-top: 50px;
             width: 199px;
             height: 100%;
             float: left;
@@ -75,15 +77,23 @@
         function Item(mother, child) {
             this.mother = mother;
             this.child  = child;
+            // for (var i=0; i < 100000000; i++){
+            //     var a = Math.sqrt(Math.random()*1000);
+            // }
         }
         Item.prototype = {
             dimensions: new Mother.Vec2(200,300),
             render: function(){
                 var child = this.child;
-                child.el.innerHTML = '<a href="#item">'+ child.deltas.origin.x +'</a>';
+                child.el.innerHTML = [
+                    'origin: '+ child.deltas.origin.x,
+                    'slot: '+ child.slot,
+                    'mother swap: '+ this.mother.deltas.swap
+                ].join('<br>');
             },
             load: function(){
                 this.child.loading(false);
+                // this.render();
             },
             clean: function(){
                 this.child.el.innerHTML = '';

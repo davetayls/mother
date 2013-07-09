@@ -43,6 +43,8 @@ Mother.prototype = {
     loadDelay        : 300,
     triggerDistance  : 10,
     maxSpeed         : 3,
+    maxPast          : -15,
+    maxFuture        : 15,
 
     render: function(){
         this._populate();
@@ -216,7 +218,7 @@ Mother.prototype = {
                 newX.duration
             );
         } else {
-            this._load();
+            this._load('end');
         }
 
         // clean up
@@ -242,7 +244,7 @@ Mother.prototype = {
             if ( now >= startTime + duration ) {
                 that.isDecelerating = false;
                 that._setPosition(new Vec2(destX, 0));
-                that._load();
+                that._load('stop');
                 that._trigger('momentum.stop');
                 return;
             }
@@ -277,17 +279,22 @@ Mother.prototype = {
         var that = this;
         clearTimeout(this._loadTimeout);
         this._loadTimeout = null;
-        this._loadTimeout = setTimeout(function () { that._load(); }, delay || this.loadDelay);
+        this._loadTimeout = setTimeout(function () { that._load('delayed'); }, delay || this.loadDelay);
     },
-    _load: function(){
+    _load: function(trigger){
         clearTimeout(this._loadTimeout);
         this._loadTimeout = null;
 
         for (var i = 0; i < this.children.length; i++) {
-            this.children[i]._load();
+            this.children[i]._load(trigger);
         }
         this._trigger('load');
     },
+
+    /**
+     * Update the positions of each child and swap children
+     * from front to back etc if needed
+     */
     _updateChildren: function(){
         var child,
             firstChild = this.children[0],
@@ -303,11 +310,15 @@ Mother.prototype = {
         }
 
         // do the swapping
-        if (firstChild.pos.x < this.boundary.left){
-            this.shift();
+        if (this.deltas.swap > this.maxPast){
+            if (lastChild.pos.x > this.boundary.right){
+                this.pop();
+            }
         }
-        if (lastChild.pos.x > this.boundary.right){
-            this.pop();
+        if (this.children.length + this.deltas.swap <= this.maxFuture){
+            if (firstChild.pos.x < this.boundary.left){
+                this.shift();
+            }
         }
     },
     /**
@@ -342,7 +353,7 @@ Mother.prototype = {
         var child;
         for (var i = 0; i < this.children.length; i++) {
             child = this.children[i];
-            child._setSlot(i);
+            child._setSlot(i, i-this.deltas.swap);
             child.updateStyle();
         }
     }
@@ -460,14 +471,28 @@ Child.prototype = {
         this.render();
         this._load();
     },
+
+    /**
+     * Update how far we have travelled from the first slot
+     * visible inside the window
+     *
+     * @return {[type]} [description]
+     */
     _updateOrigin: function(){
         this.deltas.origin.set(
-            this.mother.deltas.children.x + this.slot-this.mother.dimensions.inView,
+            this.slot + this.mother.deltas.swap,
         0);
     },
     _load: function(){
         this.content.load();
     },
+    /**
+     * When the child is moved to the back or the front we tell it
+     * what slot in the array it is now holding and how far it has
+     * travelled from the first set on load
+     *
+     * @param  {number} slot The current slot in the array
+     */
     _setSlot: function(slot){
         var delta,
             prevSlot = this.slot,
