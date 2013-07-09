@@ -225,27 +225,28 @@ Mother.prototype = {
         frame();
     },
     _bounceToEdge: function(){
-        var i = this.interaction
-            firstChild = this.children[0],
-            lastChild  = this.children[this.children.length-1]
-        ;
+        if (this.maxPast || this.maxFuture){
+            var i = this.interaction
+                firstChild = this.children[0],
+                lastChild  = this.children[this.children.length-1]
+            ;
 
-        // bounce back if at ends
-        if (firstChild.pos.x > 0){
-            this._momentum(
-                i.current.x - firstChild.pos.x,
-                500, true
-            );
-            return true;
+            // bounce back if at ends
+            if (firstChild.pos.x > 0){
+                this._momentum(
+                    i.current.x - firstChild.pos.x,
+                    500, true
+                );
+                return true;
 
-        } else if (lastChild.pos.x < this.dimensions.mother.x - this.dimensions.child.x){
-            this._momentum(
-                i.current.x + (this.dimensions.mother.x - this.dimensions.child.x - lastChild.pos.x),
-                500, true
-            );
-            return true;
+            } else if (lastChild.pos.x < this.dimensions.mother.x - this.dimensions.child.x){
+                this._momentum(
+                    i.current.x + (this.dimensions.mother.x - this.dimensions.child.x - lastChild.pos.x),
+                    500, true
+                );
+                return true;
+            }
         }
-
     },
 
     /**
