@@ -33,7 +33,6 @@ function Mother(el, ChildContent) {
     this.deltas = {
         swap        : -this.dimensions.inView, // swap diff from beginning
         distance    : new Vec2(0,0), // distance tavelled since beginning
-        children    : new Vec2(0,0), // children travelled since beginning
         currentMove : new Vec2()     // delta from previous to current
     };
     this.render();
@@ -87,23 +86,19 @@ Mother.prototype = {
             this.el.appendChild(child.el);
         }
     },
-    _setPosition: function(v){
+    _setPosition: function(x){
         var i = this.interaction,
             d = this.deltas
         ;
 
         // update interaction details
         i.previous.copy(i.current);
-        i.current.copy(v);
+        i.current.set(x, 0);
         i.current.time = Date.now();
 
         // update deltas
-        d.currentMove.copy(i.current.getMinus(i.previous)),
-        d.distance.plus(d.currentMove.getMultiply({ x: -1, y: -1}));
-        d.children.set(
-            Math.ceil(d.distance.x / this.dimensions.child.x),
-            0
-        );
+        d.currentMove.copy(i.current.Minus(i.previous)),
+        d.distance.plus(d.currentMove.Mult(-1));
         this._trigger('position.set');
     },
     _start: function(e){
@@ -120,7 +115,7 @@ Mother.prototype = {
 
         if ( this.isDecelerating ) {
             this.isDecelerating = false;
-            this._setPosition(i.current);
+            this._setPosition(i.current.x);
         }
 
         // set interaction details
@@ -143,7 +138,7 @@ Mother.prototype = {
             timestamp = e.timeStamp || Date.now()
         ;
 
-        this._setPosition(new Vec2(point.pageX, point.pageY));
+        this._setPosition(point.pageX);
         this._updateChildren();
         this._delayLoad();
 
@@ -160,20 +155,26 @@ Mother.prototype = {
     _end: function (e) {
         if ( hasTouch && e.changedTouches.length > 1 ) return;
 
+
         var i = this.interaction,
             timestamp = e.timeStamp || Date.now(),
             duration  = timestamp - i.context.time,
             newX
         ;
 
-        if (duration < 300){
-            newX = this.destination(i.current.x - i.context.x, duration);
-            this._momentum(
-                i.current.x + newX.distance,
-                newX.duration
-            );
-        } else {
-            this._load('end');
+
+        if (!this._bounceToEdge()){
+            // inertia slow down
+            if (duration < 300){
+                newX = this.destination(i.current.x - i.context.x, duration);
+                this._momentum(
+                    i.current.x + newX.distance,
+                    newX.duration
+                );
+
+            } else {
+                this._load('end');
+            }
         }
 
         // clean up
@@ -182,7 +183,7 @@ Mother.prototype = {
         this._unbind(endEv, document);
         this._unbind(cancelEv, document);
     },
-    _momentum: function (destX, duration) {
+    _momentum: function (destX, duration, isBounce) {
         var i = this.interaction,
             startTime = Date.now(),
             startX = i.current.x,
@@ -198,7 +199,7 @@ Mother.prototype = {
 
             if ( now >= startTime + duration ) {
                 that.isDecelerating = false;
-                that._setPosition(new Vec2(destX, 0));
+                that._setPosition(destX);
                 that._load('stop');
                 that._trigger('momentum.stop');
                 return;
@@ -208,14 +209,43 @@ Mother.prototype = {
             easeOut = Math.sqrt(1 - ( --now * now ));
             newX = (destX - startX) * easeOut + startX;
 
-            that._setPosition(new Vec2(newX, 0));
+            that._setPosition(newX);
             that._updateChildren();
 
-            requestFrame(frame);
+            if (!isBounce){
+                if (!that._bounceToEdge()){
+                    requestFrame(frame);
+                }
+            } else {
+                requestFrame(frame);
+            }
         }
 
         this.isDecelerating = true;
         frame();
+    },
+    _bounceToEdge: function(){
+        var i = this.interaction
+            firstChild = this.children[0],
+            lastChild  = this.children[this.children.length-1]
+        ;
+
+        // bounce back if at ends
+        if (firstChild.pos.x > 0){
+            this._momentum(
+                i.current.x - firstChild.pos.x,
+                500, true
+            );
+            return true;
+
+        } else if (lastChild.pos.x < this.dimensions.mother.x - this.dimensions.child.x){
+            this._momentum(
+                i.current.x + (this.dimensions.mother.x - this.dimensions.child.x - lastChild.pos.x),
+                500, true
+            );
+            return true;
+        }
+
     },
 
     /**
@@ -238,12 +268,20 @@ Mother.prototype = {
             swapChild
         ;
 
+        // bounce back if at ends
+        // if (firstChild.pos.x > 0){
+        //     this.deltas.currentMove.multiply(0.3);
+        // }
+        // if (lastChild.pos.x < this.dimensions.mother.x - this.dimensions.child.x){
+        //     this.deltas.currentMove.multiply(0.3);
+        // }
 
         // move children
         for (var i = 0; i < this.children.length; i++) {
             child = this.children[i];
             child._movePos(this.deltas.currentMove);
         }
+
 
         // do the swapping
         if (!this.atMaxPast){
@@ -384,14 +422,11 @@ Vec2.prototype = {
         return this;
     },
     copy: function(v){
-        this.x = v.x;
-        this.y = v.y;
-        return this;
+        return this.set(v.x, v.y);
     },
     clone: function(){
         var v = new Vec2();
-        v.copy(this);
-        return v;
+        return v.copy(this);
     },
     equals: function(v){
         return this.x === v.x && this.y === v.y;
@@ -410,8 +445,8 @@ Vec2.prototype = {
     },
     multiply: function(v){
         return this.set(
-            this.x*v.x,
-            this.y*v.y
+            this.x* (v.x || v),
+            this.y* (v.y || v)
         );
     },
     mod: function(v){
@@ -422,13 +457,13 @@ Vec2.prototype = {
     },
 
     // functions which don't change the object
-    getMinus: function(v){
+    Minus: function(v){
         return this.clone().minus(v);
     },
-    getMultiply: function(v){
+    Mult: function(v){
         return this.clone().multiply(v);
     },
-    getMod: function(v){
+    Mod: function(v){
         return this.clone().mod(v);
     },
 
@@ -518,7 +553,7 @@ Child.prototype = {
                 0
             );
         } else {
-            moved = this.pos.getMinus(prevDelta).getMod(this.dimensions);
+            moved = this.pos.Minus(prevDelta).Mod(this.dimensions);
             if (moved.x < 0){
                 moved.plus(this.dimensions);
             }
