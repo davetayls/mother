@@ -102,6 +102,8 @@
         var dist = document.getElementById('distance');
 
         var m = new Mother('#simple', Item);
+        m.maxPast = -15;
+        m.maxFuture = 15;
         function update() {
             dist.innerHTML = [
                 'distance: '+ m.deltas.distance.x,

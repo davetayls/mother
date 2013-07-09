@@ -43,8 +43,8 @@ Mother.prototype = {
     loadDelay        : 300,
     triggerDistance  : 10,
     maxSpeed         : 3,
-    maxPast          : -15,
-    maxFuture        : 15,
+    maxPast          : false, // eg -15 = stop loading children at -15 origin
+    maxFuture        : false, // eg  15 = stop loading children at 15 origin
 
     render: function(){
         this._populate();
@@ -87,51 +87,6 @@ Mother.prototype = {
             this.el.appendChild(child.el);
         }
     },
-
-    // Eventing
-    handleEvent: function(e){
-        switch ( e.type ) {
-            case startEv:
-                if ( !hasTouch && e.button !== 0 ) return;
-                this._start(e);
-                break;
-            case moveEv:
-                this._move(e);
-                break;
-            case endEv:
-            case cancelEv:
-                this._end(e);
-                break;
-            case resizeEv:
-                this._resize();
-                break;
-            case transitionEndEv:
-                this._transitionEnd(e);
-                break;
-        }
-    },
-    _bind: function (type, el, bubble) {
-        (el || this.el).addEventListener(type, this, !!bubble);
-    },
-    _unbind: function (type, el, bubble) {
-        (el || this.el).removeEventListener(type, this, !!bubble);
-    },
-    on: function(eventName, fn){
-        this.listeners[eventName] = this.listeners[eventName] || [];
-        this.listeners[eventName].push(fn);
-        return this;
-    },
-    _trigger: function(eventName){
-        if (this.listeners[eventName]){
-            for (var i=0; i < this.listeners[eventName].length; i++){
-                this.listeners[eventName][i].call(this);
-            }
-        }
-        return this;
-    },
-
-
-
     _setPosition: function(v){
         var i = this.interaction,
             d = this.deltas
@@ -262,33 +217,14 @@ Mother.prototype = {
         this.isDecelerating = true;
         frame();
     },
-    destination: function(distance, time) {
-        var speed = Math.min(Math.abs(distance) / time, this.maxSpeed),
-            friction = 0.0025
-        ;
-        distance = ( speed * speed ) / ( 2 * friction ) * ( distance < 0 ? -1 : 1 );
-        time = speed / friction;
 
-        return {
-            distance: Math.round(distance),
-            duration: Math.round(time)
-        };
-    },
-
-    _delayLoad: function(delay){
-        var that = this;
-        clearTimeout(this._loadTimeout);
-        this._loadTimeout = null;
-        this._loadTimeout = setTimeout(function () { that._load('delayed'); }, delay || this.loadDelay);
-    },
-    _load: function(trigger){
-        clearTimeout(this._loadTimeout);
-        this._loadTimeout = null;
-
-        for (var i = 0; i < this.children.length; i++) {
-            this.children[i]._load(trigger);
-        }
-        this._trigger('load');
+    /**
+     * Check whether we are at the maxPast or maxFuture
+     * so that we stop future swapping
+     */
+    _atMax: function(){
+        this.atMaxPast = this.maxPast ? this.deltas.swap <= this.maxPast : false;
+        this.atMaxFuture = this.maxFuture ? this.children.length + this.deltas.swap > this.maxFuture : false;
     },
 
     /**
@@ -310,12 +246,12 @@ Mother.prototype = {
         }
 
         // do the swapping
-        if (this.deltas.swap > this.maxPast){
+        if (!this.atMaxPast){
             if (lastChild.pos.x > this.boundary.right){
                 this.pop();
             }
         }
-        if (this.children.length + this.deltas.swap <= this.maxFuture){
+        if (!this.atMaxFuture){
             if (firstChild.pos.x < this.boundary.left){
                 this.shift();
             }
@@ -334,6 +270,7 @@ Mother.prototype = {
         this._updateSlots();
         firstChild._updateOrigin();
         firstChild.loading().render();
+        this._atMax();
     },
     /**
      * Pop a child from the end of the stack and
@@ -348,6 +285,7 @@ Mother.prototype = {
         this._updateSlots();
         lastChild._updateOrigin();
         lastChild.loading().render();
+        this._atMax();
     },
     _updateSlots: function(){
         var child;
@@ -356,6 +294,76 @@ Mother.prototype = {
             child._setSlot(i, i-this.deltas.swap);
             child.updateStyle();
         }
+    },
+
+    // Eventing
+    handleEvent: function(e){
+        switch ( e.type ) {
+            case startEv:
+                if ( !hasTouch && e.button !== 0 ) return;
+                this._start(e);
+                break;
+            case moveEv:
+                this._move(e);
+                break;
+            case endEv:
+            case cancelEv:
+                this._end(e);
+                break;
+            case resizeEv:
+                this._resize();
+                break;
+            case transitionEndEv:
+                this._transitionEnd(e);
+                break;
+        }
+    },
+    _bind: function (type, el, bubble) {
+        (el || this.el).addEventListener(type, this, !!bubble);
+    },
+    _unbind: function (type, el, bubble) {
+        (el || this.el).removeEventListener(type, this, !!bubble);
+    },
+    on: function(eventName, fn){
+        this.listeners[eventName] = this.listeners[eventName] || [];
+        this.listeners[eventName].push(fn);
+        return this;
+    },
+    _trigger: function(eventName){
+        if (this.listeners[eventName]){
+            for (var i=0; i < this.listeners[eventName].length; i++){
+                this.listeners[eventName][i].call(this);
+            }
+        }
+        return this;
+    },
+
+    _delayLoad: function(delay){
+        var that = this;
+        clearTimeout(this._loadTimeout);
+        this._loadTimeout = null;
+        this._loadTimeout = setTimeout(function () { that._load('delayed'); }, delay || this.loadDelay);
+    },
+    _load: function(trigger){
+        clearTimeout(this._loadTimeout);
+        this._loadTimeout = null;
+
+        for (var i = 0; i < this.children.length; i++) {
+            this.children[i]._load(trigger);
+        }
+        this._trigger('load');
+    },
+    destination: function(distance, time) {
+        var speed = Math.min(Math.abs(distance) / time, this.maxSpeed),
+            friction = 0.0025
+        ;
+        distance = ( speed * speed ) / ( 2 * friction ) * ( distance < 0 ? -1 : 1 );
+        time = speed / friction;
+
+        return {
+            distance: Math.round(distance),
+            duration: Math.round(time)
+        };
     }
 };
 
